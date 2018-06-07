@@ -16,16 +16,64 @@
 
 package myapp;
 
-import java.io.IOException;
+import com.google.cloud.pubsub.v1.Publisher;
+import com.google.protobuf.ByteString;
+import com.google.pubsub.v1.ProjectTopicName;
+import com.google.pubsub.v1.PubsubMessage;
+import org.joda.time.DateTime;
+
+
+import java.util.logging.Level;
+import java.util.logging.Logger;
+
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
+import java.io.IOException;
+
 
 public class DemoServlet extends HttpServlet {
+
+  private static final String PROJECT_ID = "pubsub-in-gae-te-1528383772593";
+  private static final String TOPIC_ID = "test_topic_mj";
+  private static final Logger logger = Logger.getLogger(DemoServlet.class.getName());
+
   @Override
   public void doGet(HttpServletRequest req, HttpServletResponse resp)
-      throws IOException {
+          throws IOException {
     resp.setContentType("text/plain");
     resp.getWriter().println("{ \"name\": \"World\" }");
+
+    System.out.println("Project ID:" + PROJECT_ID);
+
+    try {
+      String message = DateTime.now().toDateTime().toString();
+      publishMessage(message);
+      logger.log(Level.INFO, "Successfully published message " + message);
+    } catch (Exception ex) {
+      System.out.println("Something went wrong when publishing message!" + ex.getMessage());
+      logger.log(Level.SEVERE, "Something went wrong when publishing message!" + ex.getMessage());
+      ex.printStackTrace();
+    }
+  }
+
+  private static void publishMessage(String message) throws Exception {
+    ProjectTopicName topicName = ProjectTopicName.of(PROJECT_ID, TOPIC_ID);
+    Publisher publisher = null;
+    try {
+      publisher = Publisher.newBuilder(topicName).build();
+      ByteString data = ByteString.copyFromUtf8(message);
+      PubsubMessage pubsubMessage = PubsubMessage.newBuilder()
+              .setData(data)
+              .build();
+
+      //schedule a message to be published, messages are automatically batched
+      //only publish, don't care for the outcome
+      publisher.publish(pubsubMessage);
+    } finally {
+      if (publisher != null) {
+        publisher.shutdown();
+      }
+    }
   }
 }
