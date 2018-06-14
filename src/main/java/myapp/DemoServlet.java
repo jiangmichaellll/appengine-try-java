@@ -16,20 +16,23 @@
 
 package myapp;
 
+import com.google.api.gax.core.ExecutorProvider;
+import com.google.appengine.repackaged.com.google.common.util.concurrent.MoreExecutors;
 import com.google.cloud.pubsub.v1.Publisher;
 import com.google.protobuf.ByteString;
 import com.google.pubsub.v1.ProjectTopicName;
 import com.google.pubsub.v1.PubsubMessage;
 import org.joda.time.DateTime;
 
-
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import java.io.IOException;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.ThreadFactory;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 
 public class DemoServlet extends HttpServlet {
@@ -53,7 +56,29 @@ public class DemoServlet extends HttpServlet {
     } catch (Exception ex) {
       System.out.println("Something went wrong when publishing message!" + ex.getMessage());
       logger.log(Level.SEVERE, "Something went wrong when publishing message!" + ex.getMessage());
-      ex.printStackTrace();
+      for (StackTraceElement el : ex.getStackTrace()) {
+        logger.log(Level.SEVERE, el.toString());
+      }
+    }
+  }
+
+  private static class MyThreadFactory implements ThreadFactory {
+    @Override
+    public Thread newThread(Runnable r) {
+      r.run();
+      return Thread.currentThread();
+    }
+  }
+
+  private static class MyExecutorProvider implements ExecutorProvider {
+    @Override
+    public boolean shouldAutoClose() {
+      return true;
+    }
+
+    @Override
+    public ScheduledExecutorService getExecutor() {
+      return MoreExecutors.getExitingScheduledExecutorService(new ScheduledThreadPoolExecutor(1, new MyThreadFactory()));
     }
   }
 
@@ -61,7 +86,7 @@ public class DemoServlet extends HttpServlet {
     ProjectTopicName topicName = ProjectTopicName.of(PROJECT_ID, TOPIC_ID);
     Publisher publisher = null;
     try {
-      publisher = Publisher.newBuilder(topicName).build();
+      publisher = Publisher.newBuilder(topicName).setExecutorProvider(new MyExecutorProvider()).build();
       ByteString data = ByteString.copyFromUtf8(message);
       PubsubMessage pubsubMessage = PubsubMessage.newBuilder()
               .setData(data)
